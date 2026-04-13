@@ -1,5 +1,55 @@
 # Changelog
 
+## v2.1
+
+`/feature-check` is now session-aware. Instead of reciting the feature
+registry generically, it now reads the current session's tool log and
+cross-references against `references/native-features.md` via a Haiku
+call, returning a short markdown report on features that would have
+materially changed how the user worked in this session.
+
+### New
+
+- `scripts/session-audit.sh` — auditor runner. Resolves the session id
+  (auto-detects the most recent, or accepts one as argument), compacts
+  the tool log into a unique `(ToolName|signature, count)` list, builds
+  a three-section input block (`TOOL_LOG`, `NATIVE_FEATURES`,
+  `LOCAL_FEATURES`), invokes `claude -p --model
+  claude-haiku-4-5-20251001 --system-prompt-file audit-prompt.txt`, and
+  prints the auditor's markdown to stdout. Soft-fails on Haiku errors.
+- `scripts/audit-prompt.txt` — the system prompt that constrains Haiku
+  to: observe-only, registry-bound, evidence-over-generics, no padding,
+  explicit empty-gap template when nothing meaningful applies.
+
+### Changed
+
+- `/feature-check` in SKILL.md now runs the pipeline: refresh the KB
+  silently (`update-knowledge-base.sh`), run `session-audit.sh`, relay
+  the output verbatim. No feature invention; Claude may not add
+  features the auditor didn't mention.
+
+### Tested
+
+- Rich session (141 tool calls): auditor returned one well-justified
+  feature with concrete tool counts and source URL.
+- Light session (4 tool calls): auditor returned the exact
+  empty-gap sentence without padding.
+- Auto-detect (no session_id arg): picked the most recent session
+  correctly.
+
+Full evidence in `tests/feature-check-audit.md`.
+
+### Known trade-off
+
+The auditor invokes `claude -p` **without** `--bare`. An initial
+attempt with `--bare` failed auth because that flag skips the keychain
+read, leaving the subprocess unable to reach the model even when the
+parent Claude Code session is logged in. Dropping `--bare` means the
+subprocess inherits any ambient Claude Code config (CLAUDE.md, memory,
+etc.). Testing showed no observable pollution, but if future tuning
+reveals leakage, revisit with `--append-system-prompt-file` or a
+direct SDK call.
+
 ## v2.0.1
 
 Documentation and file-layout fixes. No behavior change for the hooks

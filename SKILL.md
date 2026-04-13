@@ -76,16 +76,39 @@ Do NOT:
 
 ## /feature-check
 
-When the user types `/feature-check`, do a full session audit:
+When the user types `/feature-check`, run the audit pipeline as Bash
+commands, in order:
 
-1. Read `references/native-features.md` in full — the canonical list
-   of native Claude Code features with source URLs and versions.
-2. Read `references/local-features.md` — skill-defined commands
-   (including `/feature-check` itself), which must NOT be presented as
-   native features.
-3. List 3–5 features (native first, clearly labelled) that would
-   materially change how the user is working in this session, with
-   one paragraph each explaining relevance to what they've been doing.
+1. **Refresh the knowledge base** (best-effort, silent on failure):
+   ```bash
+   bash ~/.claude/skills/code-whisperer/scripts/update-knowledge-base.sh >/dev/null 2>&1 || true
+   ```
+   Ensures the audit runs against the most recent version of
+   `native-features.md`. A failed refresh does not block the audit.
+
+2. **Run the session auditor:**
+   ```bash
+   bash ~/.claude/skills/code-whisperer/scripts/session-audit.sh
+   ```
+   This reads the current session's tool log, the native + local
+   feature registries, and asks Haiku (`claude -p --bare --model
+   claude-haiku-4-5-20251001 --system-prompt-file audit-prompt.txt`)
+   to identify registry features that would have materially helped.
+   The auditor prints structured markdown to stdout — or the exact
+   sentence "No notable feature gaps in this session..." if nothing
+   meaningful applies.
+
+3. **Relay the auditor's output to the user verbatim.** Do not
+   reinterpret, summarise, or re-rank it. The auditor is constrained
+   to only cite features from `references/native-features.md`; you
+   must not add features it didn't mention.
+
+If the auditor returns the empty-gap message, just show it. Do not
+invent features to pad the output.
+
+If `session-audit.sh` exits non-zero (hard failure — missing files,
+`claude` CLI not found), tell the user plainly what went wrong and
+point them at `references/native-features.md` for a manual read.
 
 The audit should draw on what you've actually observed in the session,
 not recite the knowledge base generically.
