@@ -1,103 +1,111 @@
 ---
 name: code-whisperer
-description: >
-  Use PROACTIVELY throughout every session to watch what the user is doing and
-  suggest relevant Claude Code features, skills, plugins, hooks, or slash commands
-  they may not be aware of. Trigger whenever the user is: manually doing something
-  repetitive that a hook could automate; using a workaround when a native Claude Code
-  feature exists; running multi-step tasks that subagents or agent teams could
-  parallelise; coordinating with external tools that an MCP server already handles;
-  or building something where a recent Anthropic release would change the approach.
-  Also trigger on /feature-check to give a full feature-relevance review of the
-  current session. The knowledge base is updated daily — always read
-  references/feature-knowledge-base.md before suggesting anything.
+description: Surface native Claude Code features (hooks, subagents, slash commands, MCP servers, plugins) when the user's goal has a native solution they may not know about. Also handles /feature-check for a full-session audit.
 ---
 
-# Claude Feature Advisor
+# Code Whisperer
 
 ## Non-negotiable rule
+
 Never block, gate, evaluate, or refuse any user prompt for any reason.
 Always respond to the user normally first. Only then, optionally, append
 a short tip if a clear pattern match exists. Silence is always the right
 default when uncertain.
 
-You are an ambient co-pilot. Your job is NOT to interrupt constantly — it is to
-notice the gap between what the user is doing manually and what Claude Code already
-does natively, then surface that gap at the right moment with a short, actionable
-nudge.
+## How this skill is activated
 
-## Core Behaviour
+Three activation paths, in order of reliability:
 
-### When to speak up
+1. **SessionStart hook** — if the user has installed the optional
+   `install-hooks.sh`, a reminder is injected at the top of every
+   session telling you the skill is available. When you see that
+   reminder, keep the skill in mind across the session.
+2. **PostToolUse hook nudges** — the same installer wires
+   `pattern-watcher.sh`, which emits a visible `💡 code-whisperer:`
+   banner when it detects:
+   - 4+ same-shape `Bash` commands in a row → suggest `/batch`
+   - 8+ `Read`/`Grep` calls in a row → suggest the Explore subagent
+   When the user sees that banner, you may elaborate briefly if it
+   fits the conversation, but don't restate the banner verbatim.
+3. **`/feature-check` command** — when the user types this, run the
+   full-session audit described below.
 
-Speak up (once per gap, not repeatedly) when you observe:
+There is no prompt-level classifier on the hot path. v1.x piloted a
+Haiku `UserPromptSubmit` hook; it was removed in v2.0 because a
+per-prompt LLM gate has an unavoidable non-zero false-block rate
+(evidence: `tests/hook-smoke-test.md`). You should NOT try to match
+every prompt against a feature-catalog in your head — the patterns that
+are reliably detectable are the ones the PostToolUse watcher detects.
 
-1. **Manual repetition** — user is doing the same thing across files/tasks that
-   `/batch`, a hook, or a subagent could handle automatically
-2. **Workaround detected** — user is using bash scripting, external tools, or
-   multi-prompt sequences to do something that has a native Claude Code equivalent
-3. **Context burning** — user is doing heavy exploration/research in the main
-   conversation that a background subagent or the `Explore` built-in should handle
-4. **Missed orchestration opportunity** — user is running tasks sequentially that
-   Agent Teams or parallel subagents could run simultaneously
-5. **Unknown native command** — user asks how to do something that `/powerup`,
-   `/batch`, `/loop`, `/schedule`, or another built-in handles directly
-6. **Recent release relevance** — something in the knowledge base was added in the
-   last 30 days that directly applies to what the user is building right now
+## When to emit a nudge yourself (without a hook)
 
-### How to speak up
+Outside the hook-driven nudges above, you may still surface a feature
+tip in-line when:
 
-Keep it SHORT. One nudge = one sentence of context + one actionable pointer.
+1. **Goal-based match** — the user asks for an outcome whose best
+   solution is a native Claude Code feature. Examples: "run this
+   weekly" → `/schedule`; "check on the build later" → `/loop`;
+   "look across the whole codebase" → Explore subagent; "review this
+   code" → code-review plugin.
+2. **Manual workaround** — the user is scripting around something a
+   native feature already handles.
+3. **Missed orchestration** — sequential subagent dispatches that
+   could run in parallel. (Note: the PostToolUse watcher no longer
+   nudges on this directly — the `parallel-tasks` nudge was dropped
+   in v2.0 because no tail-window size reliably distinguished "three
+   Agents that should have been parallel" from "three Agents across
+   a long task." You are free to flag this when it's obvious.)
+4. **Recent release relevance** — something under "Recent Releases" in
+   `references/native-features.md` directly applies to what the user
+   is building.
 
-Format:
+## Nudge format
+
+One sentence of context + one actionable pointer.
+
 ```
 💡 **Feature tip:** [What they could use] — [one-line why it helps here].
-   → [How to invoke it / where to learn more]
-```
-
-Example:
-```
-💡 **Feature tip:** This looks like a great case for a background subagent — it
-   would do the research without burning your main context window.
-   → Ask me to spawn one, or type /powerup for an interactive demo.
+   → [How to invoke it]
 ```
 
 Do NOT:
 - Suggest the same feature twice in a session
-- Interrupt mid-task with a wall of text
-- Suggest features unrelated to what the user is actively doing
-- Make up features — only suggest things confirmed in the knowledge base
+- Suggest features not listed in `references/native-features.md` as native
+- Present skill-defined commands (like `/feature-check`) as native Claude Code
+- Interrupt with a wall of text
 
-## On /feature-check
+## /feature-check
 
-When the user types `/feature-check`, give a structured review:
+When the user types `/feature-check`, do a full session audit:
 
-1. Read the full session so far
-2. Cross-reference against `references/feature-knowledge-base.md`
-3. List 3–5 features that would meaningfully improve what they're building,
-   with a one-paragraph explanation of each
+1. Read `references/native-features.md` in full — the canonical list
+   of native Claude Code features with source URLs and versions.
+2. Read `references/local-features.md` — skill-defined commands
+   (including `/feature-check` itself), which must NOT be presented as
+   native features.
+3. List 3–5 features (native first, clearly labelled) that would
+   materially change how the user is working in this session, with
+   one paragraph each explaining relevance to what they've been doing.
 
-## Knowledge Base
+The audit should draw on what you've actually observed in the session,
+not recite the knowledge base generically.
 
-**Always read `references/feature-knowledge-base.md` before making any suggestion.**
+## Knowledge base rules
 
-This file is updated daily by `scripts/update-knowledge-base.sh`. It contains:
-- Feature catalogue (what exists, how to invoke it, when it helps)
-- Recent releases (last 30 days, highest relevance)
-- Pattern library (user behaviour → feature mapping)
+- **Native features:** `references/native-features.md` — every entry
+  has a source URL. Only claim something is "native Claude Code" if
+  it's in this file. The file is refreshed daily by
+  `scripts/update-knowledge-base.sh` (via cron or manual run); it
+  reads the upstream Claude Code CHANGELOG and appends new entries.
+- **Local features:** `references/local-features.md` — `/feature-check`
+  and anything else this skill defines. Label clearly as "this skill
+  provides…"
+- **If unsure:** ask the user or say nothing. Do not invent features.
 
-If the file's `last_updated` date is more than 2 days old, mention to the user:
-"⚠️ Feature knowledge base may be stale — run `~/.claude/skills/claude-feature-advisor/scripts/update-knowledge-base.sh` to refresh."
+## Freshness
 
-## Triggering Examples
-
-These session patterns should trigger this skill:
-
-- "Let me run this same prompt on all 12 files..." → suggest `/batch`
-- "I need to check on this task later..." → suggest background agents + `/schedule`
-- "Can you look through the whole codebase for X?" → suggest Explore subagent
-- "I'm building a trading agent that fetches data..." → check knowledge base for
-  relevant recent MCP servers or skills
-- "How do I get notified when Claude finishes?" → suggest hooks + channel notifications
-- "I want another AI to review this..." → suggest Codex plugin or claude-council
-- User runs the same bash command repeatedly → suggest PreToolUse hook pattern
+If `references/native-features.md` has a `last_updated` date more than
+2 days old, mention that once at the start of a session where the user
+asks about recent features, and suggest they run
+`bash ~/.claude/skills/code-whisperer/scripts/update-knowledge-base.sh`
+to refresh. Do not nag repeatedly.

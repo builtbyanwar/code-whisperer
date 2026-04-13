@@ -1,5 +1,48 @@
 # Changelog
 
+## v2.0.1
+
+Documentation and file-layout fixes. No behavior change for the hooks
+shipped in v2.0. This release closes drift between SKILL.md, the update
+script, and the reference files that had accumulated during the v2.0
+work.
+
+### What was broken
+
+- **SKILL.md referenced the removed UserPromptSubmit hook** as the
+  skill's primary activation mechanism. That hook was cut in v2.0 but
+  the skill's own documentation never got updated.
+- **`update-knowledge-base.sh` wrote to `references/feature-knowledge-base.md`**
+  but SKILL.md and the installed skill only read
+  `references/native-features.md` + `references/local-features.md`.
+  The daily cron was updating a file nothing in the skill read.
+- **Repo `references/` held the old layout** while the live installed
+  skill had already moved to the native/local split.
+
+### What changed
+
+- SKILL.md rewritten to describe v2.0's actual activation model:
+  SessionStart reminder, PostToolUse pattern-watcher, and the
+  user-invoked `/feature-check` command. No more references to a
+  prompt-level classifier.
+- `update-knowledge-base.sh` now writes to
+  `references/native-features.md`. A one-shot migration guard warns
+  and exits if only the old filename is present, prompting the user
+  to rename once.
+- Repo `references/` resynced to the native/local split.
+- Added a "Freshness" section to SKILL.md — the skill will flag a
+  stale knowledge base (>2 days old) once per session when features
+  are asked about, rather than silently serving stale data.
+
+### Why v2.0.1 and not v2.1
+
+v2.1 is scoped for session-aware `/feature-check` (using the tool-log
+to identify missed features from the user's actual session). That work
+needs to build on a coherent foundation, and v2.0 shipped with its
+documentation and file structure out of sync. This patch gets the
+project back to a state where the README, SKILL.md, scripts, and
+reference files all agree on what the skill does and reads.
+
 ## v2.0
 
 Hook installer is now **two bash hooks, both deterministic**:

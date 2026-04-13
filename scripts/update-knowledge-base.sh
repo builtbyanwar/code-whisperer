@@ -7,10 +7,21 @@
 set -euo pipefail
 
 SKILL_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
-KB_FILE="$SKILL_DIR/references/feature-knowledge-base.md"
+KB_FILE="$SKILL_DIR/references/native-features.md"
 BACKUP_FILE="$KB_FILE.backup"
 LOG_FILE="$SKILL_DIR/scripts/update.log"
 TODAY=$(date +%Y-%m-%d)
+
+# Back-compat: v2.0 and earlier used feature-knowledge-base.md. If only the
+# old file exists, refuse to run rather than silently writing to a file the
+# skill no longer reads. User must rename once.
+if [ ! -f "$KB_FILE" ] && [ -f "$SKILL_DIR/references/feature-knowledge-base.md" ]; then
+  echo "⚠️  Found feature-knowledge-base.md but no native-features.md." >&2
+  echo "    v2.0.1 renamed the canonical knowledge base. One-time migration:" >&2
+  echo "      mv \"$SKILL_DIR/references/feature-knowledge-base.md\" \"$KB_FILE\"" >&2
+  echo "    Then re-run this script." >&2
+  exit 1
+fi
 
 echo "[$TODAY] Starting knowledge base update..." | tee -a "$LOG_FILE"
 
