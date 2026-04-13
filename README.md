@@ -103,12 +103,18 @@ This runs the updater every day at noon — when your machine is more likely to 
 
 To confirm everything's working, type `/feature-check` in your next session.
 
-#### Optional: deterministic feature nudging (recommended)
+#### Is this skill for you?
 
-The skill on its own relies on Claude noticing when a native feature applies. That works most of the time — but when Claude is deep in execution, the meta-level cue gets missed. Two lightweight hooks fix this:
+If you already run a heavy plugin stack — particularly **superpowers**, **feature-dev**, and **ralph-loop** from the official Claude plugins marketplace — most of what code-whisperer nudges toward is already covered by those plugins' own skills and hooks. In that setup, this skill is redundant. You'll still get value from `/feature-check` and the daily changelog sync, but the pattern-watching hooks below will rarely fire because your existing plugins already push you toward parallel dispatch, the Explore subagent, `/loop`, etc.
 
-- **SessionStart** — injects a one-line reminder at the top of every session, so the skill is guaranteed to be on Claude's radar from turn one.
-- **PostToolUse** — watches for behavioural patterns (3+ sequential `Task` calls, repeated `Bash` commands, heavy `Read`/`Grep` in the main context) and nudges once per pattern per session.
+This skill is primarily for users on a **lighter Claude Code setup** who want feature-awareness without installing the full plugin suite.
+
+#### Optional: pattern-watching hooks (experimental)
+
+The skill on its own relies on Claude noticing when a native feature applies. Two lightweight bash hooks make that more reliable:
+
+- **SessionStart** — injects a one-line reminder at the top of every session, so the skill is on Claude's radar from turn one.
+- **PostToolUse** — watches for behavioural patterns (3+ sequential `Task`/`Agent` calls, repeated `Bash` commands, heavy `Read`/`Grep` in the main context) and nudges once per pattern per session.
 
 Install with:
 ```bash
@@ -118,6 +124,12 @@ bash ~/.claude/skills/code-whisperer/scripts/install-hooks.sh
 The installer is idempotent, backs up your `~/.claude/settings.json` before touching it, and skips hooks that are already present. Requires `jq` (`brew install jq` if you don't have it).
 
 To uninstall, restore the backup the installer printed, or edit the `hooks` block out of `~/.claude/settings.json` by hand.
+
+> **Where you'll see the tip.** The watcher emits each nudge as both a `systemMessage` (meant to render as a visible banner) and an `additionalContext` entry (injected into Claude's reasoning). In the terminal `claude` CLI and most official IDE integrations, the banner appears directly in the transcript. In some third-party integrations — notably the Claude Code extension running inside Cursor — the visible banner may not render at all; in that case the tip still reaches Claude, and you'll usually see it acknowledged in Claude's next reply instead of as a distinct banner.
+
+> **Diminishing returns with a heavy plugin stack.** If you have superpowers + feature-dev installed, the nudges here will mostly not fire — superpowers' own SessionStart and skill-enforcement logic gets there first, and you're already running parallel agents and Explore subagents by habit. That's fine; the pattern watcher stays silent when it has nothing useful to say.
+
+> **Note on a piloted third hook.** An earlier draft included a `UserPromptSubmit` Haiku classifier that would read each prompt and optionally inject a feature tip. It was cut before v2.0: smoke testing showed it both under-fired (no tips across 4 clear technical prompts where one could have helped) and over-fired (blocked conversational prompts with "Operation stopped by hook"). A per-prompt LLM gate is the wrong shape for this — too much blast radius for too little signal. The evidence lives in `tests/hook-smoke-test.md`.
 
 ---
 

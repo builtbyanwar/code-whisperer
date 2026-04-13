@@ -3,12 +3,13 @@
 #
 # Reads the JSON hook payload on stdin, tracks recent tool-use patterns in a
 # per-session state file, and emits a one-time nudge when it detects:
-#   - 3+ sequential Task calls           → suggest parallel dispatch
-#   - 4+ same-shape Bash commands        → suggest /batch
-#   - 8+ Read/Grep in a row              → suggest Explore subagent
+#   - 4+ same-shape Bash commands (first two words match) → suggest /batch
+#   - 8+ Read/Grep in a row                               → suggest Explore subagent
 #
-# Each pattern nudges at most once per session (cooldown via marker files).
-# Silent on no-match — never spams.
+# Each nudge is emitted as BOTH systemMessage (visible to the user in the
+# terminal UI) and additionalContext (injected into Claude's context so the
+# model can act on the tip too). Each pattern nudges at most once per session
+# via marker files. Silent on no-match — never spams.
 
 set -euo pipefail
 
@@ -51,9 +52,14 @@ emit_nudge() {
   local marker="$state_dir/nudged-$key"
   [ -f "$marker" ] && return 0
   touch "$marker"
-  # Emit structured hook output so Claude sees it as additionalContext
+  # Emit BOTH systemMessage (visible to user, guaranteed display) AND
+  # additionalContext (injected into Claude's context so Claude can act on
+  # the tip too). Without systemMessage, Claude sees the nudge but may not
+  # relay it — in which case the user never learns about the suggested
+  # native feature. See tests/hook-smoke-test.md for the evidence that
+  # drove this change.
   cat <<EOF
-{"hookSpecificOutput":{"hookEventName":"PostToolUse","additionalContext":"💡 code-whisperer: $message"}}
+{"hookSpecificOutput":{"hookEventName":"PostToolUse","additionalContext":"💡 code-whisperer: $message"},"systemMessage":"💡 code-whisperer: $message"}
 EOF
 }
 
@@ -61,14 +67,15 @@ EOF
 
 tail_n() { tail -n "$1" "$log_file" 2>/dev/null || true; }
 
-# 1. Sequential Task calls (>= 3 in last 4 tool uses)
-task_count="$(tail_n 4 | grep -c '^Task|' || true)"
-if [ "${task_count:-0}" -ge 3 ]; then
-  emit_nudge "parallel-tasks" "You've dispatched $task_count Task agents sequentially. If they're independent, launching them in a single message runs them in parallel — see the superpowers:dispatching-parallel-agents skill or the Agent tool's parallel-call guidance."
-  exit 0
-fi
+# A "sequential Agent dispatch" nudge was piloted and dropped before v2.0.
+# The realistic gap between Agent calls in a live session (15–25 intermediate
+# tool uses for output processing and scaffolding) meant no workable window
+# could distinguish "three Agents that should have been parallel" from "three
+# Agents across different phases of a long task." See tests/hook-smoke-test.md
+# for the evidence. superpowers:dispatching-parallel-agents already covers
+# this case via its skill description; this watcher stays out of its way.
 
-# 2. Repeated Bash signatures (same first-two-words >= 4 in last 8)
+# 1. Repeated Bash signatures (same first-two-words >= 4 in last 8)
 top_bash="$(tail_n 8 | awk -F'|' '$1=="Bash" && $2!="" {print $2}' | sort | uniq -c | sort -rn | head -n1 || true)"
 if [ -n "$top_bash" ]; then
   bash_n="$(printf '%s' "$top_bash" | awk '{print $1}')"
@@ -79,7 +86,7 @@ if [ -n "$top_bash" ]; then
   fi
 fi
 
-# 3. Heavy Read/Grep in main context (>= 8 in last 12)
+# 2. Heavy Read/Grep in main context (>= 8 in last 12)
 explore_count="$(tail_n 12 | grep -cE '^(Read|Grep)\|' || true)"
 if [ "${explore_count:-0}" -ge 8 ]; then
   emit_nudge "explore-subagent" "$explore_count Read/Grep calls recently — that's heavy exploration in the main context. The Explore subagent (Agent tool, subagent_type=Explore) keeps your main context clean and returns a summary instead of raw file contents."

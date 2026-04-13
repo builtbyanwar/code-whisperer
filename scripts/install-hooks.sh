@@ -6,11 +6,19 @@
 # and skips them rather than duplicating.
 #
 # Why this exists: skill descriptions with "PROACTIVELY" are probabilistic hints
-# that Claude may miss mid-task. These hooks make feature-awareness deterministic:
-#   - SessionStart: guaranteed once-per-session reminder to use the skill
-#   - PostToolUse: behavioural pattern detection (sequential Tasks, repeated
-#                  Bash commands, heavy Read/Grep) with one-nudge-per-pattern
-#                  cooldowns per session
+# that Claude may miss mid-task. These two hooks make feature-awareness
+# deterministic:
+#   - SessionStart (bash): once-per-session reminder to use the skill
+#   - PostToolUse  (bash): behavioural pattern detection (sequential Tasks,
+#                  repeated Bash commands, heavy Read/Grep) with
+#                  one-nudge-per-pattern cooldowns per session
+#
+# A UserPromptSubmit Haiku classifier was piloted in pre-2.0 development and
+# removed: smoke testing showed it both (a) failed to inject useful tips when
+# it should have, and (b) occasionally blocked conversational prompts with
+# "Operation stopped by hook" messages. The probabilistic nature of a
+# per-prompt LLM gate made false blocks unavoidable. See
+# tests/hook-smoke-test.md for the evidence that killed it.
 
 set -euo pipefail
 
@@ -66,14 +74,14 @@ jq \
   | (
       if any(.hooks.PostToolUse[]?.hooks[]?; .command == $pt_cmd)
       then .
-      else .hooks.PostToolUse += [{"matcher":"Task|Bash|Read|Grep","hooks":[{"type":"command","command":$pt_cmd}]}]
+      else .hooks.PostToolUse += [{"matcher":"Task|Agent|Bash|Read|Grep","hooks":[{"type":"command","command":$pt_cmd}]}]
       end
     )
   ' "$SETTINGS" > "$tmp"
 
 mv "$tmp" "$SETTINGS"
 echo "✅ Hooks installed."
-echo "   • SessionStart  → reminds Claude to use code-whisperer each session"
-echo "   • PostToolUse   → watches for repetition patterns, nudges once per pattern"
+echo "   • SessionStart → once-per-session skill reminder"
+echo "   • PostToolUse  → pattern watcher, nudges once per pattern"
 echo ""
 echo "Restart Claude Code to activate."
