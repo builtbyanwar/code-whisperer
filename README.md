@@ -103,6 +103,22 @@ This runs the updater every day at noon — when your machine is more likely to 
 
 To confirm everything's working, type `/feature-check` in your next session.
 
+#### Optional: deterministic feature nudging (recommended)
+
+The skill on its own relies on Claude noticing when a native feature applies. That works most of the time — but when Claude is deep in execution, the meta-level cue gets missed. Two lightweight hooks fix this:
+
+- **SessionStart** — injects a one-line reminder at the top of every session, so the skill is guaranteed to be on Claude's radar from turn one.
+- **PostToolUse** — watches for behavioural patterns (3+ sequential `Task` calls, repeated `Bash` commands, heavy `Read`/`Grep` in the main context) and nudges once per pattern per session.
+
+Install with:
+```bash
+bash ~/.claude/skills/code-whisperer/scripts/install-hooks.sh
+```
+
+The installer is idempotent, backs up your `~/.claude/settings.json` before touching it, and skips hooks that are already present. Requires `jq` (`brew install jq` if you don't have it).
+
+To uninstall, restore the backup the installer printed, or edit the `hooks` block out of `~/.claude/settings.json` by hand.
+
 ---
 
 ### Claude Desktop (Cowork tab)
