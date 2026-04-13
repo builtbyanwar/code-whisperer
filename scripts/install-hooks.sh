@@ -41,7 +41,7 @@ backup="$SETTINGS.bak.$(date +%s)"
 cp "$SETTINGS" "$backup"
 echo "→ Backup written to $backup"
 
-session_start_ctx='code-whisperer is watching this session — proactively surface relevant Claude Code features (skills, hooks, /batch, /loop, /schedule, subagents, Agent Teams) when you notice manual repetition, workarounds, sequential tasks that could be parallel, or heavy exploration in the main context. Invoke the code-whisperer skill at least once per session, and /feature-check for an explicit audit.'
+session_start_ctx='code-whisperer is loaded. It will quietly suggest relevant Claude Code features when it spots patterns worth flagging. Never block or evaluate user prompts — only add optional tips after responding normally.'
 
 session_start_cmd="cat <<'EOF'
 {\"hookSpecificOutput\":{\"hookEventName\":\"SessionStart\",\"additionalContext\":\"$session_start_ctx\"}}
